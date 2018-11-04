@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# kernelkeeper.sh
+#
+# Remove old kernels, keeping only the running kernel and the latest kernel
+#
+PID=$$
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# root check
+if [ "$UID" != "0" ]
+then
+  echo "You must run this script as root."
+  exit 1
+fi
+
+# make sure it's ubuntu first
+UBUNTU="`which lsb_release > /dev/null && lsb_release -a 2>/dev/null | grep Ubuntu`"
+if [ "$UBUNTU" == "" ]
+then
+  echo "This script only works on Ubuntu and Ubuntu variants."
+  exit 1
+fi
+
+# store list of metapackages currently installed
+dpkg -l | grep \ linux | grep ii | awk '{print $2}' | grep -v [0-9] > /tmp/$PID.packagelist
+
+# get current version
+CURRENT="`uname -r | cut -d- -f1,2`"
+REMOVE=""
+echo "Current: $CURRENT"
+
+# scan for kernels
+for kernel in /boot/vmlinuz-*
+do
+  VERSION="`echo $kernel | cut -d- -f2,3`"
+  VARIANT="`echo $kernel | cut -d- -f4`"
+  # figure out what the latest version is
+  LATEST="`find /boot -name 'vmlinuz-*' | grep $VARIANT | cut -d- -f2,3 | sort | tail -n1`"
+  # if we're not using it and it's not new, plan to remove it
+  if [ "$VERSION" != "$CURRENT" ] && [ "$VERSION" != "$LATEST" ]
+  then
+    REMOVE="$REMOVE linux-image-$VERSION-$VARIANT"
+  fi
+done
+
+# remove the packages
+if [ "a$REMOVE" != "a" ]
+then
+  apt-get remove -y $REMOVE
+  apt-get autoremove -y
+fi
+
+# store new list of metapackages currently installed
+dpkg -l | grep \ linux | grep ii | awk '{print $2}' | grep -v [0-9] > /tmp/$PID.packagelist.new
+
+# if they're different, reinstall the missing metapackages
+MISSING="`diff /tmp/$PID.packagelist.new /tmp/$PID.packagelist --left-column | cut -d' ' -f2 | grep linux`"
+if [ "$MISSING" != "" ]
+then
+  INSTALL=""
+  while read line
+  do
+    # make sure the package is actually missing first
+    if [ "`dpkg -l | grep -v ^ii | grep $line`" != "" ]
+    then
+      INSTALL="$INSTALL $line"
+    fi
+  done </tmp/$PID.packagelist
+  # if there are any missing packages, install them
+  if [ "$INSTALL" != "" ]
+  then
+    apt-get install -y $INSTALL
+  fi
+fi
+
+# clean up
+rm /tmp/$PID.*
