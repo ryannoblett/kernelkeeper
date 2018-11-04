@@ -5,7 +5,7 @@
 # Remove old kernels, keeping only the running kernel and the latest kernel
 #
 PID=$$
-PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 
 # root check
 if [ "$UID" != "0" ]
@@ -28,7 +28,6 @@ dpkg -l | grep \ linux | grep ii | awk '{print $2}' | grep -v [0-9] > /tmp/$PID.
 # get current version
 CURRENT="`uname -r | cut -d- -f1,2`"
 REMOVE=""
-echo "Current: $CURRENT"
 
 # scan for kernels
 for kernel in /boot/vmlinuz-*
@@ -45,8 +44,9 @@ do
 done
 
 # remove the packages
-if [ "a$REMOVE" != "a" ]
+if [ "x$REMOVE" != "x" ]
 then
+  echo "Current: $CURRENT"
   apt-get remove -y $REMOVE
   apt-get autoremove -y
 fi
